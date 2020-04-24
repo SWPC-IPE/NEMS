@@ -152,6 +152,9 @@
 #ifdef FRONT_GSDCHEM
       use FRONT_GSDCHEM,    only: GSDCHEM_SS  => SetServices
 #endif
+#ifdef FRONT_SWIO
+      use FRONT_SWIO,       only: SWIO_SS  => SetServices
+#endif
   ! - Mediator
       use module_MEDIATOR,        only: MED_SS     => SetServices
       use module_MEDSpaceWeather, only: MEDSW_SS   => SetServices
@@ -235,6 +238,12 @@
 
       ! specializations:
 
+      ! Disable the hierarchy protocol by default to prevent NUOPC from
+      ! adding unnecessary connectors
+      call NUOPC_CompAttributeSet(EARTH_GRID_COMP, "HierarchyProtocol", &
+        "disable", rc=RC)
+      ESMF_ERR_RETURN(RC,RC_REG)
+
       call NUOPC_CompSpecialize(EARTH_GRID_COMP, &
         specLabel=Driver_label_SetModelServices, specRoutine=SetModelServices, &
         rc=RC)
@@ -247,10 +256,10 @@
 
       ! The NEMS Earth component is currently the top-level driver and
       ! does not need to coordinate Clocks with its parent.
-      call ESMF_MethodRemove(EARTH_GRID_COMP, Driver_label_SetRunClock, rc=RC_REG)
+      call ESMF_MethodRemove(EARTH_GRID_COMP, Driver_label_SetRunClock, rc=RC)
       ESMF_ERR_RETURN(RC,RC_REG)
       call NUOPC_CompSpecialize(EARTH_GRID_COMP, &
-        specLabel=Driver_label_SetRunClock, specRoutine=NUOPC_NoOp, rc=RC_REG)
+        specLabel=Driver_label_SetRunClock, specRoutine=NUOPC_NoOp, rc=RC)
       ESMF_ERR_RETURN(RC,RC_REG)
       
       call NUOPC_CompSpecialize(EARTH_GRID_COMP, &
@@ -2874,6 +2883,174 @@
       endif
 
       if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "O_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="O_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "H_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="H_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "He_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="He_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "N_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="N_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "NO_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="NO_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "O2_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="O2_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "N2_plus_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="N2_plus_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "O_plus_2D_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="O_plus_2D_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "O_plus_2P_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="O_plus_2P_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "ion_temperature")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="ion_temperature", &
+          canonicalUnits="K", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "electron_temperature")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="electron_temperature", &
+          canonicalUnits="K", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "eastward_exb_velocity")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="eastward_exb_velocity", &
+          canonicalUnits="m s-1", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "northward_exb_velocity")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="northward_exb_velocity", &
+          canonicalUnits="m s-1", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "upward_exb_velocity")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="upward_exb_velocity", &
+          canonicalUnits="m s-1", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
         "height")) then
         call NUOPC_FieldDictionaryAddEntry( &
           standardName="height", &
@@ -3774,6 +3951,20 @@
               file=__FILE__, rcToReturn=rc)
             return  ! bail out
 #endif
+          elseif (trim(model) == "swio") then
+#ifdef FRONT_SWIO
+            call NUOPC_DriverAddComp(driver, trim(prefix), SWIO_SS, &
+              petList=petList, comp=comp, rc=rc)
+            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+              line=__LINE__, file=trim(name)//":"//__FILE__)) return  !  bail out
+#else
+            write (msg, *) "Model '", trim(model), "' was requested, "// &
+              "but is not available in the executable!"
+            call ESMF_LogSetError(ESMF_RC_NOT_VALID, msg=msg, line=__LINE__, &
+              file=__FILE__, rcToReturn=rc)
+            return  ! bail out
+#endif
+          ! - Two mediator choices currently built into NEMS from internal
           ! - Two mediator choices currently built into NEMS from internal
           elseif (trim(model) == "nems") then
             call NUOPC_DriverAddComp(driver, trim(prefix), MED_SS, &
@@ -4261,7 +4452,6 @@
           return  ! bail out
         ! go through all of the entries in the cplList and add options
         do j=1, cplListSize
-          cplList(j) = trim(cplList(j))//":DumpWeights=true"
           cplList(j) = trim(cplList(j))//":SrcTermProcessing=1:TermOrder=SrcSeq"
           ! add connection options read in from configuration file
           call ESMF_AttributeGet(connectorList(i), name="ConnectionOptions", &
