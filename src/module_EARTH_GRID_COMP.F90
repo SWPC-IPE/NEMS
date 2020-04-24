@@ -155,6 +155,9 @@
 #ifdef FRONT_SWIO
       use FRONT_SWIO,       only: SWIO_SS  => SetServices
 #endif
+#ifdef FRONT_DATAPOLL
+      use FRONT_DATAPOLL,   only: DATAPOLL_SS => SetServices
+#endif
   ! - Mediator
       use module_MEDIATOR,        only: MED_SS     => SetServices
       use module_MEDSpaceWeather, only: MEDSW_SS   => SetServices
@@ -3964,7 +3967,19 @@
               file=__FILE__, rcToReturn=rc)
             return  ! bail out
 #endif
-          ! - Two mediator choices currently built into NEMS from internal
+          elseif (trim(model) == "datapoll") then
+#ifdef FRONT_DATAPOLL
+            call NUOPC_DriverAddComp(driver, trim(prefix), DATAPOLL_SS, &
+              petList=petList, comp=comp, rc=rc)
+            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+              line=__LINE__, file=trim(name)//":"//__FILE__)) return  !  bail out
+#else
+            write (msg, *) "Model '", trim(model), "' was requested, "// &
+              "but is not available in the executable!"
+            call ESMF_LogSetError(ESMF_RC_NOT_VALID, msg=msg, line=__LINE__, &
+              file=__FILE__, rcToReturn=rc)
+            return  ! bail out
+#endif
           ! - Two mediator choices currently built into NEMS from internal
           elseif (trim(model) == "nems") then
             call NUOPC_DriverAddComp(driver, trim(prefix), MED_SS, &
