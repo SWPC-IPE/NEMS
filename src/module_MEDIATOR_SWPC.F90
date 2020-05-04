@@ -262,7 +262,7 @@ module module_MED_SWPC
     integer, intent(out) :: rc
     
     ! -- local variables
-    logical                     :: meshWrite
+    logical                     :: isLevelsPresent, meshWrite
     integer                     :: stat
     character(len=ESMF_MAXSTR)  :: filePrefix
     real(ESMF_KIND_R8), pointer :: levels(:)
@@ -283,19 +283,28 @@ module module_MED_SWPC
       return  ! bail out
 
     call NamespaceGet("ATM", importState, geomtype=geomtype, &
-      grid=grid, mesh=mesh, rc=rc)
+      grid=grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
 
     nullify(levels)
-    call ConfigGet(mediator, levels=levels, meshWrite=meshWrite, &
-      filePrefix=filePrefix, rc=rc)
+    call ConfigGet(mediator, levels=levels, isLevelsPresent=isLevelsPresent, &
+      meshWrite=meshWrite, filePrefix=filePrefix, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    if (.not.isLevelsPresent) then
+      nullify(levels)
+      call MeshGetCoordinates(mesh, 3, levels, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+    end if
 
     if (geomtype == ESMF_GEOMTYPE_GRID) then
 

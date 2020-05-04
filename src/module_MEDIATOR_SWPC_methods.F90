@@ -69,6 +69,7 @@ module module_MED_SWPC_methods
     FieldRegrid,                       &
     GridAddNewCoord,                   &
     MeshGetBounds,                     &
+    MeshGetCoordinates,                &
     NamespaceAdd,                      &
     NamespaceAdjustFields,             &
     NamespaceAdvertise,                &
@@ -2549,6 +2550,186 @@ contains
     bounds(2) = recvData(1)
     
   end subroutine MeshGetBounds
+
+!------------------------------------------------------------------------------
+
+  subroutine MeshGetCoordinates(mesh, dim, coords, rc)
+    type(ESMF_Mesh),    intent(in) :: mesh
+    integer,            intent(in) :: dim
+    real(ESMF_KIND_R8),    pointer :: coords(:)
+    integer, optional, intent(out) :: rc
+
+    ! -- local variables
+    integer :: localrc
+    integer :: item, numOwnedNodes, spatialDim, coordCount, nodeCount
+    integer :: localPet, petCount
+    integer,            dimension(1) :: sendCounts
+    integer,            dimension(:), allocatable :: recvCounts, recvOffsets
+    real(ESMF_KIND_R8), dimension(:), allocatable, target :: ownedNodeCoords
+    real(ESMF_KIND_R8), dimension(:), allocatable :: recvCoords
+    real(ESMF_KIND_R8), dimension(:), pointer :: p
+    type(ESMF_VM) :: vm
+
+    ! -- begin
+    if (present(rc)) rc = ESMF_SUCCESS
+
+    if (associated(coords)) then
+      call ESMF_LogSetError(ESMF_RC_PTR_ISALLOC, &
+        msg="coords pointer argument must not be associated", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    call ESMF_MeshGet(mesh, spatialDim=spatialDim, &
+      numOwnedNodes=numOwnedNodes, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    if (dim > spatialDim) then
+      call ESMF_LogSetError(ESMF_RC_ARG_OUTOFRANGE, &
+        msg="dim argument is higher than Mesh spatial dimension", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    allocate(ownedNodeCoords(spatialDim*numOwnedNodes), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_MeshGet(mesh, ownedNodeCoords=ownedNodeCoords, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_VMGetCurrent(vm, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_VMGet(vm, localPet=localPet, petCount=petCount, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return
+
+    allocate(recvCounts(petCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    sendCounts(1) = numOwnedNodes
+    recvCounts    = 0
+
+    call ESMF_VMAllGather(vm, sendCounts, recvCounts, 1, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    nodeCount = sum(recvCounts)
+
+    if (nodeCount < 1) then
+      call ESMF_LogSetError(ESMF_RC_INTNRL_BAD, &
+        msg="total number of Mesh nodes < 1", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    allocate(recvCoords(nodeCount), recvOffsets(petCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    p => ownedNodeCoords(dim::spatialDim)
+
+    recvCoords  = 0._ESMF_KIND_R8
+    recvOffsets = 0
+
+    do item = 1, petCount-1
+      recvOffsets(item+1) = recvOffsets(item) + recvCounts(item)
+    end do
+
+    call ESMF_VMAllGatherV(vm, p, numOwnedNodes, recvCoords, recvCounts, &
+      recvOffsets, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    nullify(p)
+    deallocate(ownedNodeCoords, recvCounts, recvOffsets, stat=localrc)
+    if (ESMF_LogFoundDeallocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_UtilSort(recvCoords, ESMF_SORTFLAG_ASCENDING, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    coordCount = 1
+    do item = 2, nodeCount
+      if (recvCoords(item) > recvCoords(item-1)) coordCount = coordCount + 1
+    end do
+
+    allocate(coords(coordCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    coords    = 0._ESMF_KIND_R8
+    coords(1) = recvCoords(1)
+    coordCount = 1
+    do item = 2, nodeCount
+      if (recvCoords(item) > recvCoords(item-1)) then
+        coordCount = coordCount + 1
+        coords(coordCount) = recvCoords(item)
+      end if
+    end do
+
+    deallocate(recvCoords, stat=localrc)
+    if (ESMF_LogFoundDeallocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+  end subroutine MeshGetCoordinates
 
 !------------------------------------------------------------------------------
 
@@ -6900,16 +7081,17 @@ end subroutine StateFilterField
 
   ! -- Config: begin definition ---------------------------------------
 
-  subroutine ConfigGet(gcomp, levels, meshWrite, filePrefix, rc)
+  subroutine ConfigGet(gcomp, levels, isLevelsPresent, meshWrite, filePrefix, rc)
 
     type(ESMF_GridComp)                                :: gcomp
     real(ESMF_KIND_R8), pointer, optional              :: levels(:)
+    logical,                     optional, intent(out) :: isLevelsPresent
     logical,                     optional, intent(out) :: meshWrite
     character(len=ESMF_MAXSTR),  optional, intent(out) :: filePrefix
     integer,                     optional, intent(out) :: rc
 
     ! -- local variables
-    logical :: configIsPresent
+    logical :: configIsPresent, levelsIsPresent
     integer :: localrc, stat
     integer :: levelCount, columnCount
     integer :: item
@@ -6919,8 +7101,8 @@ end subroutine StateFilterField
     ! -- begin
     if (present(rc)) rc = ESMF_SUCCESS
 
-    configIsPresent = present(levels) .or. present(meshWrite) &
-      .or. present(filePrefix)
+    configIsPresent = present(levels) .or. present(isLevelsPresent) &
+      .or. present(meshWrite) .or. present(filePrefix)
     if (.not.configIsPresent) return
 
     if (present(levels)) then
@@ -6933,6 +7115,8 @@ end subroutine StateFilterField
         return
       end if
     end if
+
+    levelsIsPresent = .true.
 
     ! -- get vertical levels
     call ESMF_GridCompGet(gcomp, configIsPresent=configIsPresent, rc=localrc)
@@ -6949,7 +7133,17 @@ end subroutine StateFilterField
         file=__FILE__,  &
         rcToReturn=rc)) &
         return  ! bail out
-      if (present(levels)) then
+      if (present(isLevelsPresent)) then
+        call ESMF_ConfigFindLabel(config, label="interpolation_levels::", &
+          isPresent=levelsIsPresent, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) &
+          return  ! bail out
+        isLevelsPresent = levelsIsPresent
+      end if
+      if (levelsIsPresent .and. present(levels)) then
         ! -- retrieve number of vertical levels in configuration file
         call ESMF_ConfigGetDim(config, levelCount, columnCount, &
           label="interpolation_levels::", rc=localrc)
