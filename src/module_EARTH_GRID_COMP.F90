@@ -3006,7 +3006,7 @@
         "thermosphere_mean_molecular_mass")) then
         call NUOPC_FieldDictionaryAddEntry( &
           standardName="thermosphere_mean_molecular_mass", &
-          canonicalUnits="kg mol-1", &
+          canonicalUnits="amu", &
           rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
