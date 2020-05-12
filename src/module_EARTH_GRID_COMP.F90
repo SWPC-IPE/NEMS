@@ -2991,6 +2991,42 @@
       endif
 
       if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "electron_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="electron_density", &
+          canonicalUnits="m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "thermosphere_mean_molecular_mass")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="thermosphere_mean_molecular_mass", &
+          canonicalUnits="amu", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
+        "thermosphere_mass_density")) then
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName="thermosphere_mass_density", &
+          canonicalUnits="kg m-3", &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
+      if (.not.NUOPC_FieldDictionaryHasEntry( &
         "ion_temperature")) then
         call NUOPC_FieldDictionaryAddEntry( &
           standardName="ion_temperature", &
