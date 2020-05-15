@@ -461,8 +461,8 @@ module module_MED_SWPC
 
     ! HERE THE MEDIATOR ADVANCES: currTime -> currTime + timeStep
     
-    call ESMF_ClockPrint(clock, options="currTime", &
-      preString="------>Advancing Mediator from: ", rc=rc)
+!    call ESMF_ClockPrint(clock, options="currTime", &
+!      preString="------>Advancing Mediator from: ", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -558,7 +558,7 @@ module module_MED_SWPC
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-          call FieldPrintMinMax(tmpField, "tmp: temp_neutral", rc)
+!          call FieldPrintMinMax(tmpField, "tmp: temp_neutral", rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -590,7 +590,7 @@ module module_MED_SWPC
               line=__LINE__, &
               file=__FILE__)) &
               return  ! bail out
-            call FieldPrintMinMax(srcField, "orig - src:" // trim(rh % dstState % fieldNames(item)), rc)
+!            call FieldPrintMinMax(srcField, "orig - src:" // trim(rh % dstState % fieldNames(item)), rc)
             call FieldRegrid(rh, trim(rh % dstState % fieldNames(item)), rc=rc)
             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
               line=__LINE__, &

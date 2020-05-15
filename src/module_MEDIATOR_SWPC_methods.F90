@@ -3831,7 +3831,7 @@ contains
         rcToReturn=rc)) return  ! bail out
 
       ! -- print diagnostic info
-      call FieldPrintMinMax(srcFieldComp(comp), "pre  - src:" // trim(compNames(comp)), rc)
+!      call FieldPrintMinMax(srcFieldComp(comp), "pre  - src:" // trim(compNames(comp)), rc)
 
       dstFieldComp(comp) = StateGetField(rh % dstState, compNames(comp), component=comp, rc=localrc)
       if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -3882,7 +3882,7 @@ contains
 
     do comp = 1, compCount
       ! -- print diagnostic info
-      call FieldPrintMinMax(dstFieldComp(comp), "post - dst:" // trim(compNames(comp)), rc)
+!      call FieldPrintMinMax(dstFieldComp(comp), "post - dst:" // trim(compNames(comp)), rc)
 
       call StateStoreField(rh % srcState, srcFieldComp(comp), compNames(comp), rc=localrc)
       if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -3961,11 +3961,8 @@ contains
       file=__FILE__,  &
       rcToReturn=rc)) return  ! bail out
 
-    if (stateIntent == ESMF_STATEINTENT_IMPORT) then
-      write(6,'(" - StateGetField: state is Import: getting ",a," ...")') trim(fieldName)
-    else if (stateIntent == ESMF_STATEINTENT_EXPORT) then
-      write(6,'(" - StateGetField: state is Export: getting ",a," ...")') trim(fieldName)
-    else
+    if (stateIntent /= ESMF_STATEINTENT_IMPORT .and. &
+        stateIntent /= ESMF_STATEINTENT_EXPORT) then
       write(6,'(" - StateGetField: state is UNKNOWN for field ",a," ...")') trim(fieldName)
       if (present(rc)) rc = ESMF_FAILURE
       return
@@ -4183,7 +4180,7 @@ contains
           file=__FILE__,  &
           rcToReturn=rc)) return  ! bail out
 
-        call FieldPrintMinMax(dstField, "StateGetField:" // trim(fieldName), rc)
+!        call FieldPrintMinMax(dstField, "StateGetField:" // trim(fieldName), rc)
 
       else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -4896,10 +4893,10 @@ contains
 
 #ifdef BFB_REGRID
                   srcTermProcessing = 0
-                  write(6,'(" - RHStore: start working on RH ...",a, "(srcTermProcessing = ",i0,")")') &
-                    trim(rHandle % label), srcTermProcessing
+!                  write(6,'(" - RHStore: start working on RH ...",a, "(srcTermProcessing = ",i0,")")') &
+!                    trim(rHandle % label), srcTermProcessing
 #else
-                  write(6,'(" - RHStore: start working on RH ...",a)') trim(rHandle % label)
+!                  write(6,'(" - RHStore: start working on RH ...",a)') trim(rHandle % label)
 #endif
                   call ESMF_FieldRegridStore(srcField, dstField, &
                     regridmethod   = ESMF_REGRIDMETHOD_BILINEAR, &
@@ -4914,7 +4911,7 @@ contains
                     line=__LINE__,  &
                     file=__FILE__,  &
                     rcToReturn=rc)) return  ! bail out
-                  write(6,'(" - RHStore: done working on RH ...",a)') trim(rHandle % label)
+!                  write(6,'(" - RHStore: done working on RH ...",a)') trim(rHandle % label)
 
                   if (associated(rh)) then
                     rh % next => rHandle
@@ -4975,13 +4972,13 @@ contains
       rh => rhList
     end if
 
-    print *, 'RouteHandle Table'
-    print *, '================='
+!    print *, 'RouteHandle Table'
+!    print *, '================='
     item = 0
     do while (associated(rh))
       item = item + 1
-      write(6,'(i4,2x,a,2x,l5)') item, trim(rh % label), &
-        ESMF_RouteHandleIsCreated(rh % rh, rc=localrc)
+!      write(6,'(i4,2x,a,2x,l5)') item, trim(rh % label), &
+!        ESMF_RouteHandleIsCreated(rh % rh, rc=localrc)
       if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
         file=__FILE__, &
@@ -4995,7 +4992,7 @@ contains
       end if
       rh => rh % next
     end do
-    print *, '================='
+!    print *, '================='
     
   end subroutine RouteHandlePrint
 
