@@ -110,14 +110,25 @@ module module_MED_SWPC
     integer, intent(out)  :: rc
     
     ! -- local variables
-    integer                    :: verbosity
-    character(len=ESMF_MAXSTR) :: name, value
+    integer                    :: diagnostic, verbosity
+    character(len=ESMF_MAXSTR) :: name, value, msgString
     type(ESMF_Config)          :: config
+
+    ! -- local parameters
+    character(len=*), parameter :: rName = "InitializeP0"
 
     rc = ESMF_SUCCESS
 
     ! -- get mediator information
-    call NUOPC_CompGet(mediator, name=name, verbosity=verbosity, rc=rc)
+    call NUOPC_CompGet(mediator, name=name, diagnostic=diagnostic, &
+      verbosity=verbosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__)) &
+      return  ! bail out
+
+    ! -- log intro
+    call NUOPC_LogIntro(name, rName, verbosity, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__,  &
       file=__FILE__)) &
@@ -130,9 +141,24 @@ module module_MED_SWPC
       line=__LINE__,  &
       file=__FILE__)) &
       return  ! bail out
+
     if (btest(verbosity,8)) then
-      call ESMF_LogWrite(trim(name)//": ConfigFile = "//trim(value), &
-        ESMF_LOGMSG_INFO, rc=rc)
+      write(msgString, '(a,": ",a,": Verbosity = ",i0)') trim(name), &
+        rName, verbosity
+      call ESMF_LogWrite(msgString, ESMF_LOGMSG_INFO, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__,  &
+        file=__FILE__)) &
+        return  ! bail out
+      write(msgString, '(a,": ",a,": Diagnostic = ",i0)') trim(name), &
+        rName, diagnostic
+      call ESMF_LogWrite(msgString, ESMF_LOGMSG_INFO, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__,  &
+        file=__FILE__)) &
+        return  ! bail out
+      call ESMF_LogWrite(trim(name)//": "//rName// &
+        ": ConfigFile = "//trim(value), ESMF_LOGMSG_INFO, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__,  &
         file=__FILE__)) &
@@ -165,9 +191,16 @@ module module_MED_SWPC
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    
+
+    ! -- log extro
+    call NUOPC_LogExtro(name, rName, verbosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__)) &
+      return  ! bail out
+
   end subroutine InitializeP0
-  
+
   !-----------------------------------------------------------------------------
 
   subroutine InitializeP1(mediator, importState, exportState, clock, rc)
@@ -177,7 +210,28 @@ module module_MED_SWPC
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
 
+    ! -- local variables
+    integer                    :: verbosity
+    character(len=ESMF_MAXSTR) :: name
+
+    ! -- local parameters
+    character(len=*), parameter :: rName = "InitializeP1"
+
     rc = ESMF_SUCCESS
+
+    ! -- get mediator information
+    call NUOPC_CompGet(mediator, name=name, verbosity=verbosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__)) &
+      return  ! bail out
+
+    ! -- log intro
+    call NUOPC_LogIntro(name, rName, verbosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__)) &
+      return  ! bail out
 
     call NamespaceAdd("ATM",importState, &
       (/ &
@@ -229,9 +283,18 @@ module module_MED_SWPC
       file=__FILE__)) &
       return  ! bail out
 
-    call NamespacePrint(rc=rc)
+    if (btest(verbosity,8)) then
+      call NamespacePrint(rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+    end if
+
+    ! -- log extro
+    call NUOPC_LogExtro(name, rName, verbosity, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
+      line=__LINE__,  &
       file=__FILE__)) &
       return  ! bail out
 
@@ -445,11 +508,20 @@ module module_MED_SWPC
     type(rhType), pointer :: rh
     integer(ESMF_KIND_R8) :: advanceCount
     integer               :: item
+    integer               :: diagnostic, verbosity
 
     real(ESMF_KIND_R8),    parameter :: earthRadius = 6371008.8_ESMF_KIND_R8 !  IUGG Earth Mean Radius (Moritz, 2000)
 
     ! -- begin
     rc = ESMF_SUCCESS
+
+    ! get component's info
+    call NUOPC_CompGet(mediator, diagnostic=diagnostic, &
+      verbosity=verbosity, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__)) &
+      return  ! bail out
 
     ! query the Component for its clock, importState and exportState
     call ESMF_GridCompGet(mediator, clock=clock, &
@@ -461,31 +533,7 @@ module module_MED_SWPC
 
     ! HERE THE MEDIATOR ADVANCES: currTime -> currTime + timeStep
     
-!    call ESMF_ClockPrint(clock, options="currTime", &
-!      preString="------>Advancing Mediator from: ", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
     if (.not.RouteHandleListIsCreated()) then
-#if 0
-      ! -- set intermediate grid from field
-      call NamespaceSetLocalGridFromField("ATM", importState, "average_height", &
-        scale=1._ESMF_KIND_R8/earthRadius, offset=1._ESMF_KIND_R8, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-      ! -- then remove field from importState
-      call NamespaceRemoveField("ATM", importState, "average_height", rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-#endif
       ! -- precompute routehandles
       call RouteHandleCreate(rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -493,11 +541,13 @@ module module_MED_SWPC
         file=__FILE__)) &
         return  ! bail out
 
-      call RouteHandlePrint(rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+      if (btest(verbosity,8)) then
+        call RouteHandlePrint(rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      end if
 
     end if
 
@@ -558,23 +608,19 @@ module module_MED_SWPC
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-!          call FieldPrintMinMax(tmpField, "tmp: temp_neutral", rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
 
           ! -- only process fields with known destination
           do item = 1, size(rh % dstState % fieldNames)
             call FieldRegrid(rh, trim(rh % dstState % fieldNames(item)), &
-              auxArray=tnArray, options=rh % dstState % fieldOptions(item), rc=rc)
+              auxArray=tnArray, options=rh % dstState % fieldOptions(item), &
+              diagnostic=diagnostic, rc=rc)
             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
               line=__LINE__, &
               file=__FILE__)) &
               return  ! bail out
           end do
 
-          call ESMF_ArrayDestroy(tnArray, rc=rc)
+          call ESMF_ArrayDestroy(tnArray, noGarbage=.true., rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -590,8 +636,8 @@ module module_MED_SWPC
               line=__LINE__, &
               file=__FILE__)) &
               return  ! bail out
-!            call FieldPrintMinMax(srcField, "orig - src:" // trim(rh % dstState % fieldNames(item)), rc)
-            call FieldRegrid(rh, trim(rh % dstState % fieldNames(item)), rc=rc)
+            call FieldRegrid(rh, trim(rh % dstState % fieldNames(item)), &
+              diagnostic=diagnostic, rc=rc)
             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
               line=__LINE__, &
               file=__FILE__)) &
@@ -616,9 +662,6 @@ module module_MED_SWPC
 
     ! -- begin
     rc = ESMF_SUCCESS
-
-    ! -- free up memory
-    call RouteHandlePrint(rc=rc)
 
     ! -- routehandles
     call RouteHandleListRelease(rc=rc)
