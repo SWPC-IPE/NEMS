@@ -55,6 +55,29 @@ module module_MED_SWPC_methods
   end interface Interpolate
 
 
+  ! -- Scientific Constants
+  ! From: CODATA Recommended Values of the Fundamental Physical Constants: 2014
+  ! Mohr, P.J., Newell, D.B., and Taylor, B.N., J. Phys. Chem. Ref. Data 45,
+  ! 043102 (2016); doi: 10.1063/1.4954402
+  ! standard acceleration of gravity (m s-2)
+  real(ESMF_KIND_R8), parameter :: g0          = 9.80665_ESMF_KIND_R8
+  ! Model-assumed value of molar gas constant, for consistency
+  ! (CODATA14 value: 8.314459848 J mol-1 K-1)
+  real(ESMF_KIND_R8), parameter :: Rgas        = 8.3141_ESMF_KIND_R8
+  ! Model-assumed value for the average Earth radius, based on the mean altitude radius
+  ! (b = 6,371,230 +/- 10m) from: F. Chambat and B. Valette, Mean radius, mass,
+  ! and inertia for reference Earth models, Phys. Earth Planet. In., 124 (2001) 237-253
+  real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
+  ! -- Math Constants
+  ! From: Abramowitz, A., and Stegun, I.A., Handbook of Mathematical Functions
+  ! With Formulas, Graphs, and Mathematical Tables, DOC/National Bureau of Standards,
+  ! Applied Mathematics Series, 55, June 1964.
+  real(ESMF_KIND_R8), parameter :: pi      =  3.141592653589793238462643_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: rad2deg = 57.295779513082320876798155_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: half_pi = 0.5_ESMF_KIND_R8 * pi
+  real(ESMF_KIND_R8), parameter :: two_pi  = 2 * pi
+  ! -- minimum threshold for argument of log() function
+  real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
 
   private
 
@@ -3413,10 +3436,6 @@ contains
     integer :: i, itop, j, k, np, nd
     real(ESMF_KIND_R8) :: fact, r1, r2, x, x1, y, y1, dy, ylog(n)
 
-    real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: g0 = 9.80665_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: Rgas = 8.3141_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
     real(ESMF_KIND_R8), parameter :: const = 2 * g0 / Rgas
  
     ! -- begin
@@ -5145,8 +5164,6 @@ subroutine Set_Field_Cardinal_UVecsCart(north_field, east_field, rc)
   integer :: localDECount, i
   integer :: rc
   real(ESMF_KIND_R8) :: x,y,z
-  real(ESMF_KIND_R8),parameter :: half_pi=1.5707963267949_ESMF_KIND_R8
-  real(ESMF_KIND_R8),parameter :: two_pi=6.28318530717959_ESMF_KIND_R8
 
   ! debug
   real(ESMF_KIND_R8) :: len
@@ -5575,10 +5592,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS
@@ -6041,10 +6054,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS

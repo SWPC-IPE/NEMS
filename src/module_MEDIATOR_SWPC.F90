@@ -509,8 +509,6 @@ module module_MED_SWPC
     integer               :: item
     integer               :: diagnostic, verbosity
 
-    real(ESMF_KIND_R8),    parameter :: earthRadius = 6371008.8_ESMF_KIND_R8 !  IUGG Earth Mean Radius (Moritz, 2000)
-
     ! -- begin
     rc = ESMF_SUCCESS
 
