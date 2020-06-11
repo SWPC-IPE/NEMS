@@ -3089,7 +3089,7 @@
         "height")) then
         call NUOPC_FieldDictionaryAddEntry( &
           standardName="height", &
-          canonicalUnits="km", &
+          canonicalUnits="m", &
           rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
