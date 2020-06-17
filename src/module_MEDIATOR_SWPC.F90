@@ -1,4 +1,3 @@
-#define LEGACY
 module module_MED_SWPC
 
   !-----------------------------------------------------------------------------
@@ -502,15 +501,13 @@ module module_MED_SWPC
     ! local variables
     type(ESMF_Clock)      :: clock
     type(ESMF_Field)      :: srcField, dstField, tmpField
-    type(ESMF_Array)      :: tmpArray, tnArray
+    type(ESMF_Array)      :: tnArray
     type(ESMF_State)      :: importState, exportState
     type(ESMF_Time)       :: currTime, stopTime, startTime
     type(rhType), pointer :: rh
     integer(ESMF_KIND_R8) :: advanceCount
     integer               :: item
     integer               :: diagnostic, verbosity
-
-    real(ESMF_KIND_R8),    parameter :: earthRadius = 6371008.8_ESMF_KIND_R8 !  IUGG Earth Mean Radius (Moritz, 2000)
 
     ! -- begin
     rc = ESMF_SUCCESS
@@ -568,13 +565,9 @@ module module_MED_SWPC
       return  ! bail out
 
       ! -- identify field providing time-changing vertical levels
-#ifdef LEGACY
+      ! -- NOTE: WAM levels need to be converted from m to km
       call NamespaceSetRemoteLevelsFromField("ATM", importState, "height", &
-        norm=1000._ESMF_KIND_R8, rc=rc)
-#else
-      call NamespaceSetRemoteLevelsFromField("ATM", importState, "height", &
-        scale=1._ESMF_KIND_R8/earthRadius, offset=1._ESMF_KIND_R8, rc=rc)
-#endif
+        scale=1.e-03_ESMF_KIND_R8, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
         file=__FILE__)) &
@@ -589,21 +582,12 @@ module module_MED_SWPC
           ! -- extrapolated profiles depend upon neutral temperature at TOA
           ! -- therefore the neutral temperature field must be retrieved first
           tmpField = StateGetField(rh % srcState, "temp_neutral", &
-#ifdef LEGACY
             options="origin", rc=rc)
-#else
-            options="native", rc=rc)
-#endif
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-          call ESMF_FieldGet(tmpField, array=tmpArray, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-          tnArray = ESMF_ArrayCreate(tmpArray, rc=rc)
+          call ESMF_FieldGet(tmpField, array=tnArray, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -619,12 +603,6 @@ module module_MED_SWPC
               file=__FILE__)) &
               return  ! bail out
           end do
-
-          call ESMF_ArrayDestroy(tnArray, noGarbage=.true., rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
 
         else
           ! -- perform standard regridding w/ linear vertical interpolation

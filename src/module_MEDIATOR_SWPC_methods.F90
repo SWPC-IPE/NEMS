@@ -1,4 +1,3 @@
-#define LEGACY
 module module_MED_SWPC_methods
 
   !-----------------------------------------------------------------------------
@@ -56,6 +55,29 @@ module module_MED_SWPC_methods
   end interface Interpolate
 
 
+  ! -- Scientific Constants
+  ! From: CODATA Recommended Values of the Fundamental Physical Constants: 2014
+  ! Mohr, P.J., Newell, D.B., and Taylor, B.N., J. Phys. Chem. Ref. Data 45,
+  ! 043102 (2016); doi: 10.1063/1.4954402
+  ! standard acceleration of gravity (m s-2)
+  real(ESMF_KIND_R8), parameter :: g0          = 9.80665_ESMF_KIND_R8
+  ! Model-assumed value of molar gas constant, for consistency
+  ! (CODATA14 value: 8.314459848 J mol-1 K-1)
+  real(ESMF_KIND_R8), parameter :: Rgas        = 8.3141_ESMF_KIND_R8
+  ! Model-assumed value for the average Earth radius, based on the mean altitude radius
+  ! (b = 6,371,230 +/- 10m) from: F. Chambat and B. Valette, Mean radius, mass,
+  ! and inertia for reference Earth models, Phys. Earth Planet. In., 124 (2001) 237-253
+  real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
+  ! -- Math Constants
+  ! From: Abramowitz, A., and Stegun, I.A., Handbook of Mathematical Functions
+  ! With Formulas, Graphs, and Mathematical Tables, DOC/National Bureau of Standards,
+  ! Applied Mathematics Series, 55, June 1964.
+  real(ESMF_KIND_R8), parameter :: pi      =  3.141592653589793238462643_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: rad2deg = 57.295779513082320876798155_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: half_pi = 0.5_ESMF_KIND_R8 * pi
+  real(ESMF_KIND_R8), parameter :: two_pi  = 2 * pi
+  ! -- minimum threshold for argument of log() function
+  real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
 
   private
 
@@ -3210,12 +3232,9 @@ contains
 
     ! -- local variables
     logical :: isFlag
-    integer :: i, j, k, localrc
+    integer :: i, j, localrc
     integer :: lbnd, ubnd
     real(ESMF_KIND_R8) :: auxNorm, rt
-#ifdef LEGACY
-    integer, parameter :: extrap_start_level = 149
-#endif
 
     ! -- begin
     rc = ESMF_SUCCESS
@@ -3247,17 +3266,12 @@ contains
     if (auxNorm > 0._ESMF_KIND_R8) then
       if (present(auxfarray)) then
         ! -- log interpolation + extrapolation w/ hypsometric equation
+        j = ubound(auxfarray, dim=2)
         do i = lbnd, ubnd
-#ifdef LEGACY
-        ! -- if using extrap_start_level, make sure auxfarray is from original field (no intermediate interpolation)
-        ! -- use option "origin" in StateGetField
-          rt = auxfarray(i,extrap_start_level)
-#else
-          rt = auxfarray(i,ubound(auxfarray, dim=2))
-#endif
+          rt = auxfarray(i,j) / auxNorm
           call LogInterpolate(srcCoord(i,:), srcfarray(i,:), &
                               dstCoord(i,:), dstfarray(i,:), &
-                              rt=rt, ms=auxNorm, rc=rc)
+                              rt=rt, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -3278,13 +3292,8 @@ contains
     else
       ! -- linear interpolation, extrapolate with constant value
       do i = lbnd, ubnd
-#ifdef LEGACY
-        call LinearInterpolate(srcCoord(i,:), srcfarray(i,:), &
-                               dstCoord(i,:), dstfarray(i,:), rc)
-#else
         call PolyInterpolate(srcCoord(i,:), srcfarray(i,:), &
                              dstCoord(i,:), dstfarray(i,:), 1, rc)
-#endif
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
           file=__FILE__)) &
@@ -3339,9 +3348,10 @@ contains
     if (auxNorm > 0._ESMF_KIND_R8) then
       if (present(auxfarray)) then
         ! -- log interpolation + extrapolation w/ hypsometric equation
+        k = ubound(auxfarray, dim=3)
         do j = lbnd(2), ubnd(2)
           do i = lbnd(1), ubnd(1)
-            rt = auxfarray(i,j,ubound(auxfarray, dim=3)) / auxNorm
+            rt = auxfarray(i,j,k) / auxNorm
             call LogInterpolate(srcCoord(i,j,:), srcfarray(i,j,:), &
                                 dstCoord(i,j,:), dstfarray(i,j,:), &
                                 rt=rt, rc=rc)
@@ -3415,55 +3425,7 @@ contains
     
   end subroutine PolyInterpolate
 
-#ifdef LEGACY
-  subroutine LinearInterpolate(xs, ys, xd, yd, rc)
-    real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
-    real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
-    integer, intent(out) :: rc
-
-    ! -- local variables
-    integer :: k, kk, l, np, nd
-    integer, parameter :: extrap_start_level = 149
-
-    ! np = inlevels
-    ! nd = wamdim
-    ! varbuf = ys
-    ! hgtbuf = xs
-
-    ! -- begin
-    rc = ESMF_SUCCESS
-
-    np = size(xs)
-    nd = size(xd)
-    yd = 0._ESMF_KIND_R8
-
-    kk = 1
-    do k = 1, nd
-      do while (kk < np .and. xs(kk) < xd(k))
-        kk = kk + 1
-      end do
-      if (kk > extrap_start_level) then
-        do l = k, nd
-          yd(l)=ys(extrap_start_level)
-        end do
-        exit
-      end if
-      if (kk > 1) then
-        yd(k)=(ys(kk)*(xd(k)-xs(kk-1))+ &
-          ys(kk-1)*(xs(kk)-xd(k)))/(xs(kk)-xs(kk-1))
-      else
-        yd(k)=ys(kk)
-      end if
-    end do
-
-  end subroutine LinearInterpolate
-#endif
-
-#ifndef LEGACY
   subroutine LogInterpolate(xs, ys, xd, yd, rt, rc)
-    ! -- note: both xs and xd are assumed to be "normalized" heights
-    ! --       x = 1 + z / earthRadius
-    ! -- if absolute heights (km) are used, please set earthRadius = 1
     real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
     real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
     real(ESMF_KIND_R8), optional, intent(in) :: rt  ! reduced T = T / mass
@@ -3472,13 +3434,9 @@ contains
     ! -- local variables
     integer, parameter :: n = 2  ! linear interpolation (2 points)
     integer :: i, itop, j, k, np, nd
-    real(ESMF_KIND_R8) :: fact, x, x1, y, y1, dy, ylog(n)
+    real(ESMF_KIND_R8) :: fact, r1, r2, x, x1, y, y1, dy, ylog(n)
 
-    real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: g0 = 9.80665_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: Rgas = 8.3141_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: const = 2 * g0 * earthRadius / Rgas
+    real(ESMF_KIND_R8), parameter :: const = 2 * g0 / Rgas
  
     ! -- begin
     rc = ESMF_SUCCESS
@@ -3507,7 +3465,7 @@ contains
       yd(i) = exp(y)
     end do
 
-    ! -- extrapolatw with hypsometric equation
+    ! -- extrapolate with hypsometric equation
     if (present(rt)) then
       if (rt <= 0._ESMF_KIND_R8) then
         call ESMF_LogSetError(ESMF_RC_ARG_OUTOFRANGE, &
@@ -3521,7 +3479,9 @@ contains
       y1 = ys(np) 
       fact = const / rt
       do i = itop, nd
-        y = fact * (x1-xd(i)) / (x1*x1+xd(i)*xd(i))
+        r1 = 1._ESMF_KIND_R8 +    x1 / earthRadius
+        r2 = 1._ESMF_KIND_R8 + xd(i) / earthRadius
+        y = fact * (x1-xd(i)) / (r1*r1+r2*r2)
         yd(i) = y1 * exp(y)
         x1 = xd(i)
         y1 = yd(i)
@@ -3529,101 +3489,6 @@ contains
     end if
 
   end subroutine LogInterpolate
-
-#else
-  ! ---------- TEST
-  subroutine LogInterpolate(xs, ys, xd, yd, rt, ms, rc)
-    ! -- note: both xs and xd are assumed to be "normalized" heights
-    ! --       x = 1 + z / earthRadius
-    ! -- if absolute heights (km) are used, please set earthRadius = 1
-    real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
-    real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
-    real(ESMF_KIND_R8), optional, intent(in) :: rt  ! T at TOA
-    real(ESMF_KIND_R8), optional, intent(in) :: ms  ! mass
-    integer, intent(out) :: rc
-
-    ! -- local variables
-    integer :: k, kk, l, np, nd
-    real(ESMF_KIND_R8) :: hgt_prev, dist, H_prev, data_prev
-    real(ESMF_KIND_R8) :: hgt_curr, H_avg, H_curr, data_curr
-    real(ESMF_KIND_R8) :: R, g0, re
-    real(ESMF_KIND_R8) :: mass
-
-    integer,            parameter :: extrap_start_level = 149
-    real(ESMF_KIND_R8), parameter :: log_min = 1.0E-10
-!   real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: re = 6371.2_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: g0 = 9.80665_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: R  = 8.3141_ESMF_KIND_R8
-
-    R  = 8.3141
-    g0 = 9.80665
-    re = 6.3712e03
-
-
-    ! -- begin
-    rc = ESMF_SUCCESS
-
-    np = size(xs)
-    nd = size(xd)
-    yd = 0._ESMF_KIND_R8
-
-    ! -- interpolate
-
-    ! varbuf = ys
-    ! hgtbuf = xs
-
-    if (present(rt)) then
-      mass = 1._ESMF_KIND_R8
-      if (present(ms)) mass = ms
-      kk = 1
-      do k = 1, nd
-        do while (kk < np .and. xs(kk) < xd(k))
-          kk = kk + 1
-        end do
-        if (kk > extrap_start_level) then
-!         hgt_prev=re*(xs(extrap_start_level)-1)
-          hgt_prev=xs(extrap_start_level)
-          dist=re/(re+hgt_prev)
-          H_prev=R*rt/(mass*g0*dist*dist)
-          data_prev=ys(extrap_start_level)
-          do l = k, nd
-!           hgt_curr=re*(xd(l)-1)
-            hgt_curr=xd(l)
-            dist=re/(re+hgt_curr)
-            H_curr=R*rt/(mass*g0*dist*dist)
-
-            ! Extrapolate data to this level
-            H_avg=0.5*(H_prev+H_curr)
-            ! Temporary fix for H_avg = 0.0?
-            if ( H_avg .gt. 0. ) then
-              data_curr=data_prev*exp((hgt_prev-hgt_curr)/H_avg)
-            else
-              data_curr=data_prev
-            end if
-
-            ! Set extrapolated data in output array
-            yd(l)=data_curr
-
-            ! Set info for next pass
-            hgt_prev=hgt_curr
-            H_prev=H_curr
-            data_prev=data_curr
-          enddo
-          exit
-        endif
-        if (kk>1) then
-          yd(k)=exp((log(max(ys(kk),log_min))*(xd(k)-xs(kk-1))+ &
-            log(max(ys(kk-1),log_min))*(xs(kk)-xd(k)))/(xs(kk)-xs(kk-1)))
-        else
-          yd(k)=ys(kk)
-        endif
-      enddo
-    end if
-
-  end subroutine LogInterpolate
-
-#endif
 
   ! -- auxiliary numerical subroutines for interpolation/extrapolation from:
   ! -- W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
@@ -5299,8 +5164,6 @@ subroutine Set_Field_Cardinal_UVecsCart(north_field, east_field, rc)
   integer :: localDECount, i
   integer :: rc
   real(ESMF_KIND_R8) :: x,y,z
-  real(ESMF_KIND_R8),parameter :: half_pi=1.5707963267949_ESMF_KIND_R8
-  real(ESMF_KIND_R8),parameter :: two_pi=6.28318530717959_ESMF_KIND_R8
 
   ! debug
   real(ESMF_KIND_R8) :: len
@@ -5625,10 +5488,6 @@ subroutine Cart3D_to_Cardinal(cart_vec, &
                            cart_vec_ptr(2,i)*north_uvec_ptr(2,i)+ &
                            cart_vec_ptr(3,i)*north_uvec_ptr(3,i)
 
-!        if (i .lt. 1000) then
-!           write(*,*) i," east=",east_field_ptr(i)," north=",north_field_ptr(i)
-!        endif
-
      enddo
   enddo
 
@@ -5733,10 +5592,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS
@@ -6199,10 +6054,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS

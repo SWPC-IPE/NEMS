@@ -157,7 +157,6 @@
 #endif
   ! - Mediator
       use module_MEDIATOR,        only: MED_SS     => SetServices
-      use module_MEDSpaceWeather, only: MEDSW_SS   => SetServices
       use module_MED_SWPC,        only: MEDSWPC_SS => SetServices
 
       USE module_EARTH_INTERNAL_STATE,ONLY: EARTH_INTERNAL_STATE        &
@@ -3090,7 +3089,7 @@
         "height")) then
         call NUOPC_FieldDictionaryAddEntry( &
           standardName="height", &
-          canonicalUnits="km", &
+          canonicalUnits="m", &
           rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
@@ -4001,17 +4000,11 @@
             return  ! bail out
 #endif
           ! - Two mediator choices currently built into NEMS from internal
-          ! - Two mediator choices currently built into NEMS from internal
           elseif (trim(model) == "nems") then
             call NUOPC_DriverAddComp(driver, trim(prefix), MED_SS, &
               petList=petList, comp=comp, rc=rc)
             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
               line=__LINE__, file=trim(name)//":"//__FILE__)) return  ! bail out
-          elseif (trim(model) == "spaceweather") then
-            call NUOPC_DriverAddComp(driver, trim(prefix), MEDSW_SS, &
-              petList=petList, comp=comp, rc=rc)
-            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, file=trim(name)//":"//__FILE__)) return  ! bail out
           elseif (trim(model) == "swpc") then
             call NUOPC_DriverAddComp(driver, trim(prefix), MEDSWPC_SS, &
               petList=petList, comp=comp, rc=rc)
