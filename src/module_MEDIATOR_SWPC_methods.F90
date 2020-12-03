@@ -1,4 +1,3 @@
-#define LEGACY
 module module_MED_SWPC_methods
 
   !-----------------------------------------------------------------------------
@@ -27,6 +26,7 @@ module module_MED_SWPC_methods
     type(ESMF_Array)           :: remoteLevels
     integer                    :: ugDimLength
     integer                    :: fieldMaxRank
+    integer                    :: fieldNameMaxLength
     logical                    :: doRotation
     integer, dimension(:), pointer :: fieldDepMap => null()
     type(stateType),   pointer :: next 
@@ -55,6 +55,29 @@ module module_MED_SWPC_methods
   end interface Interpolate
 
 
+  ! -- Scientific Constants
+  ! From: CODATA Recommended Values of the Fundamental Physical Constants: 2014
+  ! Mohr, P.J., Newell, D.B., and Taylor, B.N., J. Phys. Chem. Ref. Data 45,
+  ! 043102 (2016); doi: 10.1063/1.4954402
+  ! standard acceleration of gravity (m s-2)
+  real(ESMF_KIND_R8), parameter :: g0          = 9.80665_ESMF_KIND_R8
+  ! Model-assumed value of molar gas constant, for consistency
+  ! (CODATA14 value: 8.314459848 J mol-1 K-1)
+  real(ESMF_KIND_R8), parameter :: Rgas        = 8.3141_ESMF_KIND_R8
+  ! Model-assumed value for the average Earth radius, based on the mean altitude radius
+  ! (b = 6,371,230 +/- 10m) from: F. Chambat and B. Valette, Mean radius, mass,
+  ! and inertia for reference Earth models, Phys. Earth Planet. In., 124 (2001) 237-253
+  real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
+  ! -- Math Constants
+  ! From: Abramowitz, A., and Stegun, I.A., Handbook of Mathematical Functions
+  ! With Formulas, Graphs, and Mathematical Tables, DOC/National Bureau of Standards,
+  ! Applied Mathematics Series, 55, June 1964.
+  real(ESMF_KIND_R8), parameter :: pi      =  3.141592653589793238462643_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: rad2deg = 57.295779513082320876798155_ESMF_KIND_R8
+  real(ESMF_KIND_R8), parameter :: half_pi = 0.5_ESMF_KIND_R8 * pi
+  real(ESMF_KIND_R8), parameter :: two_pi  = 2 * pi
+  ! -- minimum threshold for argument of log() function
+  real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
 
   private
 
@@ -65,10 +88,12 @@ module module_MED_SWPC_methods
   public :: &
     ConfigGet,                         &
     FieldGet,                          &
+    FieldGetMinMax,                    &
     FieldPrintMinMax,                  &
     FieldRegrid,                       &
     GridAddNewCoord,                   &
     MeshGetBounds,                     &
+    MeshGetCoordinates,                &
     NamespaceAdd,                      &
     NamespaceAdjustFields,             &
     NamespaceAdvertise,                &
@@ -256,6 +281,7 @@ contains
       s % trAction     = ""
       s % ugDimLength  = 0
       s % fieldMaxRank = 1
+      s % fieldNameMaxLength = 0
     end if
     if (associated(s % fieldNames)) then
       if (trim(s % trAction) /= trAction) then
@@ -359,6 +385,10 @@ contains
       s % fieldMaxRank  = localMaxRank
       s % doRotation    = .false.
     end if
+    s % fieldNameMaxLength = 0
+    do item = 1, size(s % fieldNames)
+      s % fieldNameMaxLength = max(s % fieldNameMaxLength, len_trim(s % fieldNames(item)))
+    end do
     s % parent = state
     nullify(s % next)
 
@@ -454,6 +484,10 @@ contains
                   line=__LINE__, &
                   file=__FILE__)) &
                   return  ! bail out
+                s % fieldNameMaxLength = 0
+                do item = 1, size(s % fieldNames)
+                  s % fieldNameMaxLength = max(s % fieldNameMaxLength, len_trim(s % fieldNames(item)))
+                end do
                 return
               end if
             end if
@@ -1205,49 +1239,6 @@ contains
             rcToReturn=rc)) &
             return  ! bail out
 
-#if 0
-          call ESMF_FieldGet(field, rank=rank, rc=localrc)
-          if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__,  &
-            file=__FILE__,  &
-            rcToReturn=rc)) &
-            return  ! bail out
-
-          select case (rank)
-            case(1)
-              call ESMF_FieldGet(field, farrayPtr=fptr1d, rc=localrc)
-              if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
-                line=__LINE__,  &
-                file=__FILE__,  &
-                rcToReturn=rc)) &
-                return  ! bail out
-              fptr1d = initValue
-            case(2)
-              call ESMF_FieldGet(field, farrayPtr=fptr2d, rc=localrc)
-              if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
-                line=__LINE__,  &
-                file=__FILE__,  &
-                rcToReturn=rc)) &
-                return  ! bail out
-              fptr2d = initValue
-            case(3)
-              call ESMF_FieldGet(field, farrayPtr=fptr3d, rc=localrc)
-              if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
-                line=__LINE__,  &
-                file=__FILE__,  &
-                rcToReturn=rc)) &
-                return  ! bail out
-              fptr3d = initValue
-            case default
-              call ESMF_LogSetError(ESMF_RC_OBJ_BAD, &
-                msg="Invalid dimensions for field "//trim(s % fieldNames(item)), &
-                line=__LINE__, &
-                file=__FILE__, &
-                rcToReturn=rc)
-                return ! bail out
-          end select
-
-#endif
           ! --- mark as updated only if in export state??
           if (stateIntent == ESMF_STATEINTENT_EXPORT) then
             call NUOPC_SetAttribute(field, name="Updated", value="true", rc=localrc)
@@ -2552,6 +2543,186 @@ contains
 
 !------------------------------------------------------------------------------
 
+  subroutine MeshGetCoordinates(mesh, dim, coords, rc)
+    type(ESMF_Mesh),    intent(in) :: mesh
+    integer,            intent(in) :: dim
+    real(ESMF_KIND_R8),    pointer :: coords(:)
+    integer, optional, intent(out) :: rc
+
+    ! -- local variables
+    integer :: localrc
+    integer :: item, numOwnedNodes, spatialDim, coordCount, nodeCount
+    integer :: localPet, petCount
+    integer,            dimension(1) :: sendCounts
+    integer,            dimension(:), allocatable :: recvCounts, recvOffsets
+    real(ESMF_KIND_R8), dimension(:), allocatable, target :: ownedNodeCoords
+    real(ESMF_KIND_R8), dimension(:), allocatable :: recvCoords
+    real(ESMF_KIND_R8), dimension(:), pointer :: p
+    type(ESMF_VM) :: vm
+
+    ! -- begin
+    if (present(rc)) rc = ESMF_SUCCESS
+
+    if (associated(coords)) then
+      call ESMF_LogSetError(ESMF_RC_PTR_ISALLOC, &
+        msg="coords pointer argument must not be associated", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    call ESMF_MeshGet(mesh, spatialDim=spatialDim, &
+      numOwnedNodes=numOwnedNodes, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    if (dim > spatialDim) then
+      call ESMF_LogSetError(ESMF_RC_ARG_OUTOFRANGE, &
+        msg="dim argument is higher than Mesh spatial dimension", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    allocate(ownedNodeCoords(spatialDim*numOwnedNodes), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_MeshGet(mesh, ownedNodeCoords=ownedNodeCoords, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_VMGetCurrent(vm, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_VMGet(vm, localPet=localPet, petCount=petCount, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__,  &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return
+
+    allocate(recvCounts(petCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    sendCounts(1) = numOwnedNodes
+    recvCounts    = 0
+
+    call ESMF_VMAllGather(vm, sendCounts, recvCounts, 1, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    nodeCount = sum(recvCounts)
+
+    if (nodeCount < 1) then
+      call ESMF_LogSetError(ESMF_RC_INTNRL_BAD, &
+        msg="total number of Mesh nodes < 1", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return ! bail out
+    end if
+
+    allocate(recvCoords(nodeCount), recvOffsets(petCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    p => ownedNodeCoords(dim::spatialDim)
+
+    recvCoords  = 0._ESMF_KIND_R8
+    recvOffsets = 0
+
+    do item = 1, petCount-1
+      recvOffsets(item+1) = recvOffsets(item) + recvCounts(item)
+    end do
+
+    call ESMF_VMAllGatherV(vm, p, numOwnedNodes, recvCoords, recvCounts, &
+      recvOffsets, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    nullify(p)
+    deallocate(ownedNodeCoords, recvCounts, recvOffsets, stat=localrc)
+    if (ESMF_LogFoundDeallocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    call ESMF_UtilSort(recvCoords, ESMF_SORTFLAG_ASCENDING, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    coordCount = 1
+    do item = 2, nodeCount
+      if (recvCoords(item) > recvCoords(item-1)) coordCount = coordCount + 1
+    end do
+
+    allocate(coords(coordCount), stat=localrc)
+    if (ESMF_LogFoundAllocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+    coords    = 0._ESMF_KIND_R8
+    coords(1) = recvCoords(1)
+    coordCount = 1
+    do item = 2, nodeCount
+      if (recvCoords(item) > recvCoords(item-1)) then
+        coordCount = coordCount + 1
+        coords(coordCount) = recvCoords(item)
+      end if
+    end do
+
+    deallocate(recvCoords, stat=localrc)
+    if (ESMF_LogFoundDeallocError(statusToCheck=localrc, &
+      msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__, &
+      rcToReturn=rc)) &
+      return
+
+  end subroutine MeshGetCoordinates
+
+!------------------------------------------------------------------------------
+
   subroutine NamespaceSetLocalGrid(name, grid, rc)
     character(len=*), intent(in) :: name
     type(ESMF_Grid)              :: grid
@@ -3061,12 +3232,9 @@ contains
 
     ! -- local variables
     logical :: isFlag
-    integer :: i, j, k, localrc
+    integer :: i, j, localrc
     integer :: lbnd, ubnd
     real(ESMF_KIND_R8) :: auxNorm, rt
-#ifdef LEGACY
-    integer, parameter :: extrap_start_level = 149
-#endif
 
     ! -- begin
     rc = ESMF_SUCCESS
@@ -3098,17 +3266,12 @@ contains
     if (auxNorm > 0._ESMF_KIND_R8) then
       if (present(auxfarray)) then
         ! -- log interpolation + extrapolation w/ hypsometric equation
+        j = ubound(auxfarray, dim=2)
         do i = lbnd, ubnd
-#ifdef LEGACY
-        ! -- if using extrap_start_level, make sure auxfarray is from original field (no intermediate interpolation)
-        ! -- use option "origin" in StateGetField
-          rt = auxfarray(i,extrap_start_level)
-#else
-          rt = auxfarray(i,ubound(auxfarray, dim=2))
-#endif
+          rt = auxfarray(i,j) / auxNorm
           call LogInterpolate(srcCoord(i,:), srcfarray(i,:), &
                               dstCoord(i,:), dstfarray(i,:), &
-                              rt=rt, ms=auxNorm, rc=rc)
+                              rt=rt, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -3129,13 +3292,8 @@ contains
     else
       ! -- linear interpolation, extrapolate with constant value
       do i = lbnd, ubnd
-#ifdef LEGACY
-        call LinearInterpolate(srcCoord(i,:), srcfarray(i,:), &
-                               dstCoord(i,:), dstfarray(i,:), rc)
-#else
         call PolyInterpolate(srcCoord(i,:), srcfarray(i,:), &
                              dstCoord(i,:), dstfarray(i,:), 1, rc)
-#endif
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
           file=__FILE__)) &
@@ -3190,9 +3348,10 @@ contains
     if (auxNorm > 0._ESMF_KIND_R8) then
       if (present(auxfarray)) then
         ! -- log interpolation + extrapolation w/ hypsometric equation
+        k = ubound(auxfarray, dim=3)
         do j = lbnd(2), ubnd(2)
           do i = lbnd(1), ubnd(1)
-            rt = auxfarray(i,j,ubound(auxfarray, dim=3)) / auxNorm
+            rt = auxfarray(i,j,k) / auxNorm
             call LogInterpolate(srcCoord(i,j,:), srcfarray(i,j,:), &
                                 dstCoord(i,j,:), dstfarray(i,j,:), &
                                 rt=rt, rc=rc)
@@ -3266,55 +3425,7 @@ contains
     
   end subroutine PolyInterpolate
 
-#ifdef LEGACY
-  subroutine LinearInterpolate(xs, ys, xd, yd, rc)
-    real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
-    real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
-    integer, intent(out) :: rc
-
-    ! -- local variables
-    integer :: k, kk, l, np, nd
-    integer, parameter :: extrap_start_level = 149
-
-    ! np = inlevels
-    ! nd = wamdim
-    ! varbuf = ys
-    ! hgtbuf = xs
-
-    ! -- begin
-    rc = ESMF_SUCCESS
-
-    np = size(xs)
-    nd = size(xd)
-    yd = 0._ESMF_KIND_R8
-
-    kk = 1
-    do k = 1, nd
-      do while (kk < np .and. xs(kk) < xd(k))
-        kk = kk + 1
-      end do
-      if (kk > extrap_start_level) then
-        do l = k, nd
-          yd(l)=ys(extrap_start_level)
-        end do
-        exit
-      end if
-      if (kk > 1) then
-        yd(k)=(ys(kk)*(xd(k)-xs(kk-1))+ &
-          ys(kk-1)*(xs(kk)-xd(k)))/(xs(kk)-xs(kk-1))
-      else
-        yd(k)=ys(kk)
-      end if
-    end do
-
-  end subroutine LinearInterpolate
-#endif
-
-#ifndef LEGACY
   subroutine LogInterpolate(xs, ys, xd, yd, rt, rc)
-    ! -- note: both xs and xd are assumed to be "normalized" heights
-    ! --       x = 1 + z / earthRadius
-    ! -- if absolute heights (km) are used, please set earthRadius = 1
     real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
     real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
     real(ESMF_KIND_R8), optional, intent(in) :: rt  ! reduced T = T / mass
@@ -3323,13 +3434,9 @@ contains
     ! -- local variables
     integer, parameter :: n = 2  ! linear interpolation (2 points)
     integer :: i, itop, j, k, np, nd
-    real(ESMF_KIND_R8) :: fact, x, x1, y, y1, dy, ylog(n)
+    real(ESMF_KIND_R8) :: fact, r1, r2, x, x1, y, y1, dy, ylog(n)
 
-    real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: g0 = 9.80665_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: Rgas = 8.3141_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: earthRadius = 6371.2_ESMF_KIND_R8
-    real(ESMF_KIND_R8), parameter :: const = 2 * g0 * earthRadius / Rgas
+    real(ESMF_KIND_R8), parameter :: const = 2 * g0 / Rgas
  
     ! -- begin
     rc = ESMF_SUCCESS
@@ -3358,7 +3465,7 @@ contains
       yd(i) = exp(y)
     end do
 
-    ! -- extrapolatw with hypsometric equation
+    ! -- extrapolate with hypsometric equation
     if (present(rt)) then
       if (rt <= 0._ESMF_KIND_R8) then
         call ESMF_LogSetError(ESMF_RC_ARG_OUTOFRANGE, &
@@ -3372,7 +3479,9 @@ contains
       y1 = ys(np) 
       fact = const / rt
       do i = itop, nd
-        y = fact * (x1-xd(i)) / (x1*x1+xd(i)*xd(i))
+        r1 = 1._ESMF_KIND_R8 +    x1 / earthRadius
+        r2 = 1._ESMF_KIND_R8 + xd(i) / earthRadius
+        y = fact * (x1-xd(i)) / (r1*r1+r2*r2)
         yd(i) = y1 * exp(y)
         x1 = xd(i)
         y1 = yd(i)
@@ -3380,101 +3489,6 @@ contains
     end if
 
   end subroutine LogInterpolate
-
-#else
-  ! ---------- TEST
-  subroutine LogInterpolate(xs, ys, xd, yd, rt, ms, rc)
-    ! -- note: both xs and xd are assumed to be "normalized" heights
-    ! --       x = 1 + z / earthRadius
-    ! -- if absolute heights (km) are used, please set earthRadius = 1
-    real(ESMF_KIND_R8), dimension(:), intent(in)  :: xs, ys, xd
-    real(ESMF_KIND_R8), dimension(:), intent(out) :: yd
-    real(ESMF_KIND_R8), optional, intent(in) :: rt  ! T at TOA
-    real(ESMF_KIND_R8), optional, intent(in) :: ms  ! mass
-    integer, intent(out) :: rc
-
-    ! -- local variables
-    integer :: k, kk, l, np, nd
-    real(ESMF_KIND_R8) :: hgt_prev, dist, H_prev, data_prev
-    real(ESMF_KIND_R8) :: hgt_curr, H_avg, H_curr, data_curr
-    real(ESMF_KIND_R8) :: R, g0, re
-    real(ESMF_KIND_R8) :: mass
-
-    integer,            parameter :: extrap_start_level = 149
-    real(ESMF_KIND_R8), parameter :: log_min = 1.0E-10
-!   real(ESMF_KIND_R8), parameter :: log_min = 1.e-10_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: re = 6371.2_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: g0 = 9.80665_ESMF_KIND_R8
-!   real(ESMF_KIND_R8), parameter :: R  = 8.3141_ESMF_KIND_R8
-
-    R  = 8.3141
-    g0 = 9.80665
-    re = 6.3712e03
-
-
-    ! -- begin
-    rc = ESMF_SUCCESS
-
-    np = size(xs)
-    nd = size(xd)
-    yd = 0._ESMF_KIND_R8
-
-    ! -- interpolate
-
-    ! varbuf = ys
-    ! hgtbuf = xs
-
-    if (present(rt)) then
-      mass = 1._ESMF_KIND_R8
-      if (present(ms)) mass = ms
-      kk = 1
-      do k = 1, nd
-        do while (kk < np .and. xs(kk) < xd(k))
-          kk = kk + 1
-        end do
-        if (kk > extrap_start_level) then
-!         hgt_prev=re*(xs(extrap_start_level)-1)
-          hgt_prev=xs(extrap_start_level)
-          dist=re/(re+hgt_prev)
-          H_prev=R*rt/(mass*g0*dist*dist)
-          data_prev=ys(extrap_start_level)
-          do l = k, nd
-!           hgt_curr=re*(xd(l)-1)
-            hgt_curr=xd(l)
-            dist=re/(re+hgt_curr)
-            H_curr=R*rt/(mass*g0*dist*dist)
-
-            ! Extrapolate data to this level
-            H_avg=0.5*(H_prev+H_curr)
-            ! Temporary fix for H_avg = 0.0?
-            if ( H_avg .gt. 0. ) then
-              data_curr=data_prev*exp((hgt_prev-hgt_curr)/H_avg)
-            else
-              data_curr=data_prev
-            end if
-
-            ! Set extrapolated data in output array
-            yd(l)=data_curr
-
-            ! Set info for next pass
-            hgt_prev=hgt_curr
-            H_prev=H_curr
-            data_prev=data_curr
-          enddo
-          exit
-        endif
-        if (kk>1) then
-          yd(k)=exp((log(max(ys(kk),log_min))*(xd(k)-xs(kk-1))+ &
-            log(max(ys(kk-1),log_min))*(xs(kk)-xd(k)))/(xs(kk)-xs(kk-1)))
-        else
-          yd(k)=ys(kk)
-        endif
-      enddo
-    end if
-
-  end subroutine LogInterpolate
-
-#endif
 
   ! -- auxiliary numerical subroutines for interpolation/extrapolation from:
   ! -- W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
@@ -3614,12 +3628,13 @@ contains
   end subroutine FieldGet
 
 
-  subroutine FieldRegrid(rh, fieldName, auxArray, options, rc)
+  subroutine FieldRegrid(rh, fieldName, auxArray, options, diagnostic, rc)
 
     type(rhType)                            :: rh
     character(len=*),           intent(in)  :: fieldName
     type(ESMF_Array), optional, intent(in)  :: auxArray
     character(len=*), optional, intent(in)  :: options
+    integer,          optional, intent(in)  :: diagnostic
     integer,          optional, intent(out) :: rc
 
     ! -- local variables
@@ -3627,11 +3642,17 @@ contains
     type(ESMF_Field), dimension(2) :: srcFieldComp, dstFieldComp
     integer :: localrc
     integer :: localDeCount, comp, compCount
+    integer :: ldiagnostic
     logical :: isSrcCart, isDstCart
     character(len=ESMF_MAXSTR) :: compNames(2)
+    character(len=ESMF_MAXSTR) :: msgString
+    real(ESMF_KIND_R8) :: fieldMin, fieldMax
 
     ! -- begin 
     if (present(rc)) rc = ESMF_SUCCESS
+
+    ldiagnostic = 0
+    if (present(diagnostic)) ldiagnostic = diagnostic
 
     call FieldGet(rh % srcState, fieldName, compNames=compNames, compCount=compCount, rc=localrc)
     if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -3650,7 +3671,20 @@ contains
         rcToReturn=rc)) return  ! bail out
 
       ! -- print diagnostic info
-      call FieldPrintMinMax(srcFieldComp(comp), "pre  - src:" // trim(compNames(comp)), rc)
+      if (btest(ldiagnostic,17)) then
+        call FieldGetMinMax(srcFieldComp(comp), fieldMin, fieldMax, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) return  ! bail out
+        write(msgString,'("MED: Run: Regrid: ",a," : src : min/max =",2g20.8)') &
+          compNames(comp)(1:rh % srcState % fieldNameMaxLength), fieldMin, fieldMax
+        call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) return  ! bail out
+      end if
 
       dstFieldComp(comp) = StateGetField(rh % dstState, compNames(comp), component=comp, rc=localrc)
       if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -3701,7 +3735,20 @@ contains
 
     do comp = 1, compCount
       ! -- print diagnostic info
-      call FieldPrintMinMax(dstFieldComp(comp), "post - dst:" // trim(compNames(comp)), rc)
+      if (btest(ldiagnostic,17)) then
+        call FieldGetMinMax(dstFieldComp(comp), fieldMin, fieldMax, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) return  ! bail out
+        write(msgString,'("MED: Run: Regrid: ",a," : dst : min/max =",2g20.8)') &
+          compNames(comp)(1:rh % dstState % fieldNameMaxLength), fieldMin, fieldMax
+        call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) return  ! bail out
+      end if
 
       call StateStoreField(rh % srcState, srcFieldComp(comp), compNames(comp), rc=localrc)
       if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -3780,11 +3827,8 @@ contains
       file=__FILE__,  &
       rcToReturn=rc)) return  ! bail out
 
-    if (stateIntent == ESMF_STATEINTENT_IMPORT) then
-      write(6,'(" - StateGetField: state is Import: getting ",a," ...")') trim(fieldName)
-    else if (stateIntent == ESMF_STATEINTENT_EXPORT) then
-      write(6,'(" - StateGetField: state is Export: getting ",a," ...")') trim(fieldName)
-    else
+    if (stateIntent /= ESMF_STATEINTENT_IMPORT .and. &
+        stateIntent /= ESMF_STATEINTENT_EXPORT) then
       write(6,'(" - StateGetField: state is UNKNOWN for field ",a," ...")') trim(fieldName)
       if (present(rc)) rc = ESMF_FAILURE
       return
@@ -4002,7 +4046,7 @@ contains
           file=__FILE__,  &
           rcToReturn=rc)) return  ! bail out
 
-        call FieldPrintMinMax(dstField, "StateGetField:" // trim(fieldName), rc)
+!        call FieldPrintMinMax(dstField, "StateGetField:" // trim(fieldName), rc)
 
       else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -4420,9 +4464,11 @@ contains
 
   end subroutine FieldInterpolate
 
-  subroutine FieldPrintMinMax(field, label, rc)
+
+  subroutine FieldGetMinMax(field, fieldMin, fieldMax, rc)
     type(ESMF_Field)                        :: field
-    character(len=*), optional,  intent(in) :: label
+    real(ESMF_KIND_R8),         intent(out) :: fieldMin
+    real(ESMF_KIND_R8),         intent(out) :: fieldMax
     integer,          optional, intent(out) :: rc
 
     ! -- local variables
@@ -4430,7 +4476,7 @@ contains
     integer :: localDe, localDeCount
     character(len=ESMF_MAXSTR) :: name
     real(ESMF_KIND_R8), pointer :: fptr1d(:), fptr2d(:,:), fptr3d(:,:,:)
-    real(ESMF_KIND_R8) :: fmin, fmax, fieldMin, fieldMax
+    real(ESMF_KIND_R8) :: fmin, fmax
 
     ! -- begin
     if (present(rc)) rc = ESMF_SUCCESS
@@ -4483,7 +4529,41 @@ contains
       fieldMax = max(fieldMax, fmax)
     end do
 
-    write(6,'("FieldPrintMinMax: ",a,1x,a," min = ",g14.6," max = ",g14.6)') &
+  end subroutine FieldGetMinMax
+
+  subroutine FieldPrintMinMax(field, label, logUnit, rc)
+    type(ESMF_Field)                        :: field
+    character(len=*), optional, intent(in)  :: label
+    integer,          optional, intent(in)  :: logUnit
+    integer,          optional, intent(out) :: rc
+
+    ! -- local variables
+    integer :: localrc
+    integer :: lunit
+    character(len=ESMF_MAXSTR) :: name
+    real(ESMF_KIND_R8) :: fieldMin, fieldMax
+
+    ! -- begin
+    if (present(rc)) rc = ESMF_SUCCESS
+
+    lunit = 6
+    if (present(logUnit)) lunit = logUnit
+
+    call ESMF_FieldGet(field, name=name, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return  ! bail out
+
+    call FieldGetMinMax(field, fieldMin, fieldMax, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return  ! bail out
+
+    write(lunit,'("FieldPrintMinMax: ",a,1x,a," min = ",g14.6," max = ",g14.6)') &
       trim(label), trim(name), fieldMin, fieldMax
 
   end subroutine FieldPrintMinMax
@@ -4715,10 +4795,6 @@ contains
 
 #ifdef BFB_REGRID
                   srcTermProcessing = 0
-                  write(6,'(" - RHStore: start working on RH ...",a, "(srcTermProcessing = ",i0,")")') &
-                    trim(rHandle % label), srcTermProcessing
-#else
-                  write(6,'(" - RHStore: start working on RH ...",a)') trim(rHandle % label)
 #endif
                   call ESMF_FieldRegridStore(srcField, dstField, &
                     regridmethod   = ESMF_REGRIDMETHOD_BILINEAR, &
@@ -4733,7 +4809,6 @@ contains
                     line=__LINE__,  &
                     file=__FILE__,  &
                     rcToReturn=rc)) return  ! bail out
-                  write(6,'(" - RHStore: done working on RH ...",a)') trim(rHandle % label)
 
                   if (associated(rh)) then
                     rh % next => rHandle
@@ -4794,27 +4869,29 @@ contains
       rh => rhList
     end if
 
-    print *, 'RouteHandle Table'
-    print *, '================='
-    item = 0
-    do while (associated(rh))
-      item = item + 1
-      write(6,'(i4,2x,a,2x,l5)') item, trim(rh % label), &
-        ESMF_RouteHandleIsCreated(rh % rh, rc=localrc)
-      if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__, &
-        rcToReturn=rc)) return  ! bail out
-      if (printDetails) then
-        call ESMF_RouteHandlePrint(rh % rh, rc=localrc)
+    if (localPet == 0) then
+      print *, 'RouteHandle Table'
+      print *, '================='
+      item = 0
+      do while (associated(rh))
+        item = item + 1
+         write(6,'(i4,2x,a,2x,l5)') item, trim(rh % label), &
+           ESMF_RouteHandleIsCreated(rh % rh, rc=localrc)
         if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
           file=__FILE__, &
           rcToReturn=rc)) return  ! bail out
-      end if
-      rh => rh % next
-    end do
-    print *, '================='
+        if (printDetails) then
+          call ESMF_RouteHandlePrint(rh % rh, rc=localrc)
+          if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__, &
+            rcToReturn=rc)) return  ! bail out
+        end if
+        rh => rh % next
+      end do
+      print *, '================='
+    end if
     
   end subroutine RouteHandlePrint
 
@@ -5087,8 +5164,6 @@ subroutine Set_Field_Cardinal_UVecsCart(north_field, east_field, rc)
   integer :: localDECount, i
   integer :: rc
   real(ESMF_KIND_R8) :: x,y,z
-  real(ESMF_KIND_R8),parameter :: half_pi=1.5707963267949_ESMF_KIND_R8
-  real(ESMF_KIND_R8),parameter :: two_pi=6.28318530717959_ESMF_KIND_R8
 
   ! debug
   real(ESMF_KIND_R8) :: len
@@ -5413,10 +5488,6 @@ subroutine Cart3D_to_Cardinal(cart_vec, &
                            cart_vec_ptr(2,i)*north_uvec_ptr(2,i)+ &
                            cart_vec_ptr(3,i)*north_uvec_ptr(3,i)
 
-!        if (i .lt. 1000) then
-!           write(*,*) i," east=",east_field_ptr(i)," north=",north_field_ptr(i)
-!        endif
-
      enddo
   enddo
 
@@ -5521,10 +5592,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS
@@ -5987,10 +6054,6 @@ end subroutine StateFilterField
     real(ESMF_KIND_R8), dimension(:),   allocatable :: y
     real(ESMF_KIND_R8), dimension(:,:), allocatable :: x
     type(ESMF_VM) :: localVM
-
-    ! -- local parameters
-    real(ESMF_KIND_R8), parameter :: rad2deg = &
-      57.29577951308232087721_ESMF_KIND_R8
 
     ! begin
     if (present(rc)) rc = ESMF_SUCCESS
@@ -6900,16 +6963,17 @@ end subroutine StateFilterField
 
   ! -- Config: begin definition ---------------------------------------
 
-  subroutine ConfigGet(gcomp, levels, meshWrite, filePrefix, rc)
+  subroutine ConfigGet(gcomp, levels, isLevelsPresent, meshWrite, filePrefix, rc)
 
     type(ESMF_GridComp)                                :: gcomp
     real(ESMF_KIND_R8), pointer, optional              :: levels(:)
+    logical,                     optional, intent(out) :: isLevelsPresent
     logical,                     optional, intent(out) :: meshWrite
     character(len=ESMF_MAXSTR),  optional, intent(out) :: filePrefix
     integer,                     optional, intent(out) :: rc
 
     ! -- local variables
-    logical :: configIsPresent
+    logical :: configIsPresent, levelsIsPresent
     integer :: localrc, stat
     integer :: levelCount, columnCount
     integer :: item
@@ -6919,8 +6983,8 @@ end subroutine StateFilterField
     ! -- begin
     if (present(rc)) rc = ESMF_SUCCESS
 
-    configIsPresent = present(levels) .or. present(meshWrite) &
-      .or. present(filePrefix)
+    configIsPresent = present(levels) .or. present(isLevelsPresent) &
+      .or. present(meshWrite) .or. present(filePrefix)
     if (.not.configIsPresent) return
 
     if (present(levels)) then
@@ -6933,6 +6997,8 @@ end subroutine StateFilterField
         return
       end if
     end if
+
+    levelsIsPresent = .true.
 
     ! -- get vertical levels
     call ESMF_GridCompGet(gcomp, configIsPresent=configIsPresent, rc=localrc)
@@ -6949,7 +7015,17 @@ end subroutine StateFilterField
         file=__FILE__,  &
         rcToReturn=rc)) &
         return  ! bail out
-      if (present(levels)) then
+      if (present(isLevelsPresent)) then
+        call ESMF_ConfigFindLabel(config, label="interpolation_levels::", &
+          isPresent=levelsIsPresent, rc=localrc)
+        if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__,  &
+          file=__FILE__,  &
+          rcToReturn=rc)) &
+          return  ! bail out
+        isLevelsPresent = levelsIsPresent
+      end if
+      if (levelsIsPresent .and. present(levels)) then
         ! -- retrieve number of vertical levels in configuration file
         call ESMF_ConfigGetDim(config, levelCount, columnCount, &
           label="interpolation_levels::", rc=localrc)
