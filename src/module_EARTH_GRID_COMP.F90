@@ -159,7 +159,6 @@
       use FRONT_DATAPOLL,   only: DATAPOLL_SS => SetServices
 #endif
   ! - Mediator
-      use module_MEDIATOR,        only: MED_SS     => SetServices
       use module_MED_SWPC,        only: MEDSWPC_SS => SetServices
 
       USE module_EARTH_INTERNAL_STATE,ONLY: EARTH_INTERNAL_STATE        &
@@ -4015,12 +4014,7 @@
               file=__FILE__, rcToReturn=rc)
             return  ! bail out
 #endif
-          ! - Two mediator choices currently built into NEMS from internal
-          elseif (trim(model) == "nems") then
-            call NUOPC_DriverAddComp(driver, trim(prefix), MED_SS, &
-              petList=petList, comp=comp, rc=rc)
-            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, file=trim(name)//":"//__FILE__)) return  ! bail out
+          ! - Only the SWPC mediator can currently be built into NEMS
           elseif (trim(model) == "swpc") then
             call NUOPC_DriverAddComp(driver, trim(prefix), MEDSWPC_SS, &
               petList=petList, comp=comp, rc=rc)
