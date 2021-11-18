@@ -59,12 +59,6 @@ module module_MED_SWPC
       return  ! bail out
 
     ! IPDv03p3: realize connected Fields with transfer action "provide"
-    call NUOPC_CompSetEntryPoint(mediator, ESMF_METHOD_INITIALIZE, &
-      phaseLabelList=(/"IPDv03p3"/), userRoutine=InitializeP3, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
 
     ! IPDv03p4: optionally modify the decomp/distr of transferred Grid/Mesh
 
@@ -114,6 +108,7 @@ module module_MED_SWPC
     type(ESMF_Config)          :: config
 
     ! -- local parameters
+    logical :: isPresent, isSet
     character(len=*), parameter :: rName = "InitializeP0"
 
     rc = ESMF_SUCCESS
@@ -134,12 +129,13 @@ module module_MED_SWPC
       return  ! bail out
 
     ! -- get name of config file
-    call ESMF_AttributeGet(mediator, name="ConfigFile", value=value, &
-      defaultValue="med.rc", convention="NUOPC", purpose="Instance", rc=rc)
+    call NUOPC_CompAttributeGet(mediator, name="ConfigFile", value=value, &
+      isPresent=isPresent, isSet=isSet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__,  &
       file=__FILE__)) &
       return  ! bail out
+    if (.not.isSet) value = "med.rc"
 
     if (btest(verbosity,8)) then
       write(msgString, '(a,": ",a,": Verbosity = ",i0)') trim(name), &
@@ -299,21 +295,6 @@ module module_MED_SWPC
 
   end subroutine InitializeP1
 
-  !-----------------------------------------------------------------------------
-
-  subroutine InitializeP3(mediator, importState, exportState, clock, rc)
-    ! IPDv03p3: realize connected Fields with transfer action "provide"
-    ! and remove Fields that are not connected
-    type(ESMF_GridComp)  :: mediator
-    type(ESMF_State)     :: importState, exportState
-    type(ESMF_Clock)     :: clock
-    integer, intent(out) :: rc
-
-    ! -- begin
-    call NamespaceCheckConnectedFields(rc)
-    
-  end subroutine InitializeP3
-  
   !-----------------------------------------------------------------------------
 
   subroutine InitializeP5(mediator, importState, exportState, clock, rc)
