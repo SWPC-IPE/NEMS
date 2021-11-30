@@ -110,7 +110,7 @@ module module_MED_SWPC_methods
     NamespaceSetLocalMesh,             &
     NamespaceSetRemoteLevelsFromField, &
     NamespaceUpdateFields,             &
-    ReducedT62MeshCreate,              &
+    ReducedGaussianMeshCreate,         &
     RouteHandleCreate,                 &
     RouteHandleListGet,                &
     RouteHandleListIsCreated,          &
@@ -6117,7 +6117,91 @@ end subroutine StateFilterField
 
   !-----------------------------------------------------------------------------
 
-  subroutine ReducedT62MeshCreate(gcomp, levels, mesh2d, mesh3d, levArray, rc)
+  subroutine ReducedGaussianReadList(filename, array, rc)
+    character(len=*),     intent(in)  :: filename
+    integer, allocatable, intent(out) :: array(:)
+    integer,    optional, intent(out) :: rc
+
+    ! -- local variables
+    integer :: localrc, stat
+    integer :: iunit
+    integer :: elemCount
+    logical :: exists
+    character(len=ESMF_MAXSTR) :: errmsg
+
+    ! -- begin
+    if (present(rc)) rc = ESMF_SUCCESS
+
+    errmsg = "File I/O error"
+    inquire(file=trim(filename), exist=exists, iomsg=errmsg, iostat=stat)
+    if (stat /= 0) then
+      call ESMF_LogSetError(ESMF_FAILURE, msg=trim(errmsg) // " - " // trim(filename), &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return
+    end if
+
+    if (exists) then
+      call ESMF_UtilIOUnitGet(iunit, rc=localrc)
+      if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__,  &
+        rcToReturn=rc)) &
+        return  ! bail out
+      open(iunit, file=trim(filename), form="formatted", status="old", &
+        action="read", position="rewind", iostat=stat)
+      if (stat /= 0) then
+        call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=filename, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rcToReturn=rc)
+        return
+      end if
+      read(iunit, *, iostat=stat) elemCount
+      if (stat /= 0) then
+        call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=filename, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rcToReturn=rc)
+        return
+      end if
+      allocate(array(2 * elemCount), stat=stat)
+      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+        msg="Unable to allocate memory", &
+        line=__LINE__,  &
+        file=__FILE__,  &
+        rcToReturn=rc)) &
+        return  ! bail out
+      read(iunit, *, iostat=stat) array(1:elemCount)
+      if (stat /= 0) then
+        call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=filename, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rcToReturn=rc)
+        return
+      end if
+      close(iunit, iostat=stat)
+      if (stat /= 0) then
+        call ESMF_LogSetError(ESMF_RC_FILE_CLOSE, msg=filename, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rcToReturn=rc)
+        return
+      end if
+      array(elemCount+1:) = array(elemCount::-1)
+    else
+      call ESMF_LogSetError(ESMF_FAILURE, &
+        msg="File " // trim(filename) // " does not exist.", &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)
+      return
+    end if
+
+  end subroutine ReducedGaussianReadList
+
+  subroutine ReducedGaussianMeshCreate(gcomp, levels, mesh2d, mesh3d, levArray, rc)
 
     type(ESMF_GridComp)                     :: gcomp
     real(ESMF_KIND_R8),         intent(in)  :: levels(:)
@@ -6134,6 +6218,7 @@ end subroutine StateFilterField
     integer :: iprint, item, n, pet
     integer :: lats_node_a
     integer :: ipt_lats_node_a
+    integer :: latg, latg2
     integer, dimension(:), allocatable :: nlats
     integer, dimension(:), allocatable :: global_lats_a
     integer, dimension(:), allocatable :: lonsperlat
@@ -6143,14 +6228,24 @@ end subroutine StateFilterField
     type(ESMF_VM)       :: vm
 
     ! -- local parameters
-    integer, parameter :: latg2 = 47
-    integer, parameter :: latg  = 2*latg2
+    character(len=*), parameter :: gridfile = "lonsperlat.dat"
 
     ! -- begin
     if (present(rc)) rc = ESMF_SUCCESS
 
-    ! -- reduced T62 definitions
-    allocate(lonsperlat(latg), global_lats_a(latg), stat=stat)
+    ! -- read reduced Gaussian grid definitions from file
+    call ReducedGaussianReadList(gridfile, lonsperlat, rc=localrc)
+    if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__,  &
+      rcToReturn=rc)) &
+      return  ! bail out
+
+    latg  = size(lonsperlat)
+    latg2 = latg / 2
+
+    ! -- reduced Gaussian grid definitions
+    allocate(global_lats_a(latg), stat=stat)
     if (ESMF_LogFoundAllocError(statusToCheck=stat, &
       msg="Unable to allocate memory", &
       line=__LINE__,  &
@@ -6158,21 +6253,11 @@ end subroutine StateFilterField
       rcToReturn=rc)) &
       return  ! bail out
 
-    lonsperlat(1:latg2) = (/ &
-       30,   30,   30,   40,   48,   56,   60,   72,   72,   80, &
-       90,   90,   96,  110,  110,  120,  120,  128,  144,  144, &
-      144,  144,  154,  160,  160,  168,  168,  180,  180,  180, &
-      180,  180,  180,  192,  192,  192,  192,  192,  192,  192, &
-      192,  192,  192,  192,  192,  192,  192 /)
-    lonsperlat(latg:latg2+1:-1) = lonsperlat(1:latg2)
-
-    global_lats_a = (/ &
-      47, 16, 80, 46, 78, 81, 45, 17, 14, 44, 79, 15, 43, 18, 13, &
-      42, 77, 82, 41, 76, 83, 40, 74, 12, 39, 75, 11, 38, 22, 84, 37, 73, 85, &
-      36, 21, 10, 35, 19, 9, 48, 20, 8, 49, 23, 87, 61, 72, 86, 60, 24, 88, 59, &
-      25, 7, 58, 71, 6, 57, 70, 89, 56, 26, 90, 55, 68, 5, 54, 69, 91, 53, 27, &
-      4, 52, 30, 93, 51, 31, 92, 50, 32, 1, 34, 33, 3, 29, 28, 2, 64, 63, 94, &
-      65, 62, 66, 67 /)
+    ! -- set latitude indices
+    ! -- latitudes are arranged sequentially for simplicity (no shuffling)
+    do item = 1, latg
+      global_lats_a(item) = item
+    end do
 
     call ESMF_GridCompGet(gcomp, vm=vm, rc=localrc)
     if (ESMF_LogFoundError(rcToCheck=localrc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -6304,7 +6389,7 @@ end subroutine StateFilterField
       rcToReturn=rc)) &
       return  ! bail out
 
-  end subroutine ReducedT62MeshCreate
+  end subroutine ReducedGaussianMeshCreate
 
   subroutine gfs_dyn_glats(lgghaf,colrad,wgt,wgtcs,rcs2,iprint)
 !

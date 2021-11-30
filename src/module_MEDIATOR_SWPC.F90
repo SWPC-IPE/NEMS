@@ -380,7 +380,7 @@ module module_MED_SWPC
 
     else if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-      call ReducedT62MeshCreate(mediator, levels, mesh, localMesh, &
+      call ReducedGaussianMeshCreate(mediator, levels, mesh, localMesh, &
         levArray=array, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
