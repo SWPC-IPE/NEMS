@@ -50,7 +50,7 @@ elif [[ -d /lfs/h1 ]] ; then
     if ( ! eval module help > /dev/null 2>&1 ) ; then
         source /usr/share/lmod/lmod/init/$__ms_shell
     fi
-    module purge
+    module reset
 elif [[ -d /dcom && -d /hwrf ]] ; then
     # We are on NOAA Tide or Gyre
     if ( ! eval module help > /dev/null 2>&1 ) ; then
