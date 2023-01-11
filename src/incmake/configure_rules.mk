@@ -30,10 +30,10 @@ $(NEMSDIR)/src/ESMFVersionDefine.h:
 # $(MODULE_LOGIC)
 
 ifneq ($(CHOSEN_MODULE),)
-$(CONFDIR)/modules.nems: $(MODULE_DIR)/$(CHOSEN_MODULE)
+$(CONFDIR)/modules.nems.lua: $(MODULE_DIR)/$(CHOSEN_MODULE)
 	cp $(MODULE_DIR)/$(CHOSEN_MODULE) $@
 else
-$(CONFDIR)/modules.nems:
+$(CONFDIR)/modules.nems.lua:
 	cat /dev/null > $@
 endif
 
@@ -67,7 +67,7 @@ unconfigure_NEMS:
 	rm -f $(NEMS_CONF_FILES)
 
 # Test the module support.
-module_test: $(CONFDIR)/modules.nems
+module_test: $(CONFDIR)/modules.nems.lua
 	$(MODULE_LOGIC) ; \
 	env | grep ESMF
 
