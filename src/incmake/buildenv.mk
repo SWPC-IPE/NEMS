@@ -52,7 +52,7 @@ define ULIMIT_MODULE_LOGIC
 endef
 
 define SOURCE_MODULE_LOGIC
-  . $(CONFDIR)/modules.nems
+  . $(CONFDIR)/modules.nems.lua
 endef
 
 # ----------------------------------------------------------------------
