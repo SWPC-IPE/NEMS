@@ -90,8 +90,6 @@ endif
 MAIN = MAIN_NEMS.o
 
 OBJS = module_NEMS_UTILS.o \
-       module_MEDIATOR_methods.o \
-       module_MEDIATOR.o \
        module_MEDIATOR_SWPC_methods.o \
        module_MEDIATOR_SWPC.o \
        module_EARTH_INTERNAL_STATE.o \
