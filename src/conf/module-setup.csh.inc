@@ -49,7 +49,7 @@ else if ( { test -d /nasa } ) then
     endif
     module purge
 else if ( { test -d /glade } ) then
-    # We are on NCAR Cheyenne
+    # We are on NCAR Derecho
     if ( ! { module help >& /dev/null } ) then
       source /glade/u/apps/ch/modulefiles/default/localinit/localinit.csh
     endif
