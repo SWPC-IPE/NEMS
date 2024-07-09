@@ -49,7 +49,7 @@ else if ( { test -L /usrx && sh -c "readlink /usrx 2> /dev/null | grep dell" } )
     endif
     module purge
 else if ( { test -d /glade } ) then
-    # We are on NCAR Cheyenne
+    # We are on NCAR Derecho
     if ( ! { module help >& /dev/null } ) then
       source /glade/u/apps/ch/modulefiles/default/localinit/localinit.csh
     endif
