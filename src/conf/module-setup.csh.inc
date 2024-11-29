@@ -42,11 +42,11 @@ else if ( { test -d /dcom -a -d /hwrf } ) then
         source /usrx/local/Modules/default/init/$__ms_shell
     endif
     module purge
-else if ( { test -L /usrx && sh -c "readlink /usrx 2> /dev/null | grep dell" } ) then
-    # We are on WCOSS Mars or Venus
-    if ( ! { module help >& /dev/null } ) then
-        source /usrx/local/prod/lmod/lmod/init/$__ms_shell
-    endif
+else if ( { test -d /nasa } ) then
+    # We are on Pleiades
+#    if ( ! { module help >& /dev/null } ) then
+        source /usr/share/lmod/lmod/init/$__ms_shell
+#    endif
     module purge
 else if ( { test -d /glade } ) then
     # We are on NCAR Derecho
