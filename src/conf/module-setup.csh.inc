@@ -43,10 +43,10 @@ else if ( { test -d /dcom -a -d /hwrf } ) then
     endif
     module purge
 else if ( { test -d /nasa } ) then
-    # We are on Pleidaes
-    if ( ! { module help >& /dev/null } ) then
+    # We are on Pleiades
+#    if ( ! { module help >& /dev/null } ) then
         source /usr/share/lmod/lmod/init/$__ms_shell
-    endif
+#    endif
     module purge
 else if ( { test -d /glade } ) then
     # We are on NCAR Derecho
